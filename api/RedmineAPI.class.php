@@ -1,5 +1,7 @@
 <?php
 
+require_once( 'ActiveResource.php' );
+
 class RedmineAPI {
     var $version = "1.3";
     var $errorMessage;

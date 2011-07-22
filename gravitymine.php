@@ -4,7 +4,7 @@ Plugin Name: Gravity Forms Redmine Add-On
 Plugin URI: http://www.gravityforms.com
 Description: Integrates Gravity Forms with Redmine, enabling end users to report new issues through Gravity Forms.
 Version: 0.1
-Author: log.OSCON
+Author: log.pt
 Author URI: http://log.pt
 
 This program is free software; you can redistribute it and/or modify
