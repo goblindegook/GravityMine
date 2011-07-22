@@ -1,0 +1,4 @@
+Gravity Mine relies on PHP ActiveResource, a library that enables access to Rails' REST APIs.
+
+Gravity Mine
+https://github.com/lux/phpactiveresource
