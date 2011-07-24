@@ -22,9 +22,6 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 */
 
-if (!defined("LOGPT_UPGRADE_URL"))
-	define( "LOGPT_UPGRADE_URL", "http://log.pt/wp-content/plugins/upgrade/" );
-
 add_action( 'init',  array( 'GFRedmine', 'init' ) );
 
 register_activation_hook( __FILE__, array( 'GFRedmine', 'add_permissions' ) );
@@ -32,8 +29,9 @@ register_activation_hook( __FILE__, array( 'GFRedmine', 'add_permissions' ) );
 class GFRedmine
 {
     private static $path = "gravitymine/gravitymine.php";
-    private static $url = "http://log.pt";
+    private static $url = 'http://log.pt';
     private static $slug = "gravitymine";
+    private static $textdomain = 'gravitymine';
     private static $version = "0.1";
     private static $min_gravityforms_version = "1.5";
     private static $min_redmine_version = "1.1";
@@ -43,7 +41,7 @@ class GFRedmine
         if (RG_CURRENT_PAGE == "plugins.php")
         {
             //loading translations
-            load_plugin_textdomain( 'gravitymine', FALSE, '/gravitymine/languages' );
+            load_plugin_textdomain( self::$textdomain, FALSE, '/gravitymine/languages' );
             add_action(' after_plugin_row_' . self::$path, array('GFRedmine', 'plugin_row') );
 
             //force new remote request for version info on the plugin page
@@ -56,12 +54,7 @@ class GFRedmine
         if (is_admin())
         {
             //loading translations
-            load_plugin_textdomain( 'gravitymine', FALSE, '/gravitymine/languages' );
-
-            //automatic upgrade hooks
-            add_filter( 'transient_update_plugins'				, array( 'GFRedmine', 'check_update' ) );
-            add_filter( 'site_transient_update_plugins'			, array( 'GFRedmine', 'check_update' ) );
-            add_action( 'install_plugins_pre_plugin-information', array( 'GFRedmine', 'display_changelog' ) );
+            load_plugin_textdomain( self::$textdomain, FALSE, '/gravitymine/languages' );
 
             //integrating with Members plugin
             if(function_exists('members_get_capabilities'))
@@ -69,7 +62,7 @@ class GFRedmine
 
             //creates the subnav left menu
             add_filter( 'gform_addon_navigation', array( 'GFRedmine', 'create_menu') );
-
+            
             if (self::is_redmine_page())
             {
                 //enqueueing sack for AJAX requests
@@ -94,11 +87,10 @@ class GFRedmine
             {
                 //loading data class
                 require_once( self::get_base_path() . "/data.php");
-
+                
                 add_action( 'wp_ajax_gf_redmine_update_feed_active'	, array( 'GFRedmine', 'update_feed_active' ) );
                 add_action( 'wp_ajax_gf_select_redmine_form'		, array( 'GFRedmine', 'select_redmine_form' ) );
                 add_action( 'wp_ajax_gf_redmine_confirm_settings'	, array( 'GFRedmine', 'confirm_settings' ) );
-
             }
             else if (RGForms::get( "page" ) == "gf_settings")
             {
@@ -112,11 +104,28 @@ class GFRedmine
             require_once( self::get_base_path() . "/data.php" );
 
             //handling post submission.
+            /*
             add_filter( 'gform_confirmation'				, array( 'GFRedmine', 'send_to_redmine' ), 1000, 4 );
             add_filter( 'gform_disable_post_creation'		, array( 'GFRedmine', 'delay_post' ), 10, 3 );
             add_filter( 'gform_disable_user_notification'	, array( 'GFRedmine', 'delay_autoresponder' ), 10, 3 );
             add_filter( 'gform_disable_admin_notification'	, array( 'GFRedmine', 'delay_notification' ), 10, 3 );
+            */
         }
+    }
+    
+    
+    public static function create_menu ($menus)
+    {
+        // Adding submenu if user has access
+        $permission = self::has_access( 'gravityforms_redmine' );
+        if(!empty($permission))
+            $menus[] = array(
+                'name'          => 'gf_redmine',
+                'label'         => __( 'Redmine', self::$textdomain),
+                'callback'      =>  array( 'GFRedmine', 'redmine_page' ),
+                'permission'    => $permission
+            );
+        return $menus;
     }
     
     
@@ -154,20 +163,20 @@ class GFRedmine
     }
     
 
-    private static function get_api ()
+    private static function get_api ( $element, $data = array() )
     {
         $settings = get_option( "gf_redmine_settings" );
 
-        if (!empty( $settings["url"] ) && !empty( $settings["apikey"] ))
+        if (!empty( $element ) && !empty( $settings["url"] ) && !empty( $settings["apikey"] ))
         {
             if (!class_exists( "RedmineAPI" ))
             {
-                require_once("api/RedmineAPI.class.php");
+                require_once( "api/RedmineAPI.class.php" );
             }
 
-            $api = new RedmineAPI( $settings["url"], $settings["apikey"], 'issue' );
+            $api = new RedmineAPI( $settings["url"], $settings["apikey"], $element, $data );
         }
-
+        
         if (!$api || $api->errno)
             return null;
 
@@ -186,13 +195,13 @@ class GFRedmine
             self::uninstall();
 
             ?>
-            <div class="updated fade" style="padding:20px;"><?php _e(sprintf("Gravity Forms Redmine Add-On has been successfully uninstalled. It can be reactivated from the %splugins page%s.", "<a href='plugins.php'>","</a>"), "gravitymine")?></div>
+            <div class="updated fade" style="padding:20px;"><?php _e( 'Gravity Forms Redmine Add-On has been successfully uninstalled. It can be reactivated from the <a href="plugins.php">plugins page</a>.', self::$textdomain ) ?></div>
             <?php
             return;
         }
         else if (rgpost( "gf_redmine_submit" ))
         {
-            check_admin_referer("update", "gf_redmine_update");
+            check_admin_referer( "update", "gf_redmine_update" );
             
             $settings = array(
             	"url" 		=> $_POST["gf_redmine_url"],
@@ -238,14 +247,14 @@ class GFRedmine
 
         <form method="post" action="">
             <?php wp_nonce_field("update", "gf_redmine_update") ?>
-            <h3><?php _e("Redmine Account Information", "gravitymine") ?></h3>
+            <h3><?php _e( "Redmine Account Information", self::$textdomain ) ?></h3>
             <p style="text-align: left;">
-                <?php _e( '<a href="http://www.redmine.org/" target="_blank">Redmine</a> description. Use Gravity Forms to collect customer information and automatically report an issue.', "gravitymine" ) ?>
+                <?php _e( '<a href="http://www.redmine.org/" target="_blank">Redmine</a> is a free and open source, web-based project management and bug-tracking tool. Use Gravity Forms to collect customer information and automatically report an issue.', self::$textdomain ) ?>
             </p>
 
             <table class="form-table">
                 <tr class="<?php echo $hidden_class ?>">
-                    <th scope="row"><label for="gf_redmine_url"><?php _e("Redmine URL", "gravitymine"); ?></label> </th>
+                    <th scope="row"><label for="gf_redmine_url"><?php _e( "Redmine URL", self::$textdomain ); ?></label> </th>
                     <td>
                     	<input type="text" id="gf_redmine_url" name="gf_redmine_url" value="<?php echo esc_attr($settings["url"]) ?>" size="50" />
                     	<?php echo $feedback_image_url ?>
@@ -253,7 +262,7 @@ class GFRedmine
                 </tr>
 
                 <tr>
-                    <th scope="row"><label for="gf_redmine_apikey"><?php _e("Redmine API Key", "gravitymine"); ?></label> </th>
+                    <th scope="row"><label for="gf_redmine_apikey"><?php _e("Redmine API Key", self::$textdomain); ?></label> </th>
                     <td>
                         <input type="password" id="gf_redmine_apikey" name="gf_redmine_apikey" value="<?php echo esc_attr($settings["apikey"]) ?>" size="50"/>
                         <?php echo $feedback_image_apikey ?>
@@ -265,20 +274,23 @@ class GFRedmine
                 </tr>
                 
                 <tr>
-                    <td colspan="2" ><input type="submit" name="gf_redmine_submit" class="button-primary" value="<?php _e("Save Settings", "gravitymine") ?>" /></td>
+                    <td colspan="2" ><input type="submit" name="gf_redmine_submit" class="button-primary" value="<?php _e( "Save Settings", self::$textdomain ) ?>" /></td>
                 </tr>
             </table>
         </form>
 
         <form action="" method="post">
-            <?php wp_nonce_field("uninstall", "gf_redmine_uninstall") ?>
-            <?php if(GFCommon::current_user_can_any("gravityforms_redmine_uninstall")){ ?>
+            <?php wp_nonce_field( "uninstall", "gf_redmine_uninstall" ) ?>
+            <?php
+                if (GFCommon::current_user_can_any( "gravityforms_redmine_uninstall" ))
+                {
+            ?>
                 <div class="hr-divider"></div>
 
-                <h3><?php _e("Uninstall Redmine Add-On", "gravitymine") ?></h3>
-                <div class="delete-alert"><?php _e("Warning: This operation deletes ALL Redmine Feeds.", "gravitymine") ?>
+                <h3><?php _e("Uninstall Redmine Add-On", self::$textdomain) ?></h3>
+                <div class="delete-alert"><?php _e("Warning: This operation deletes ALL Redmine Feeds.", self::$textdomain) ?>
                     <?php
-                    $uninstall_button = '<input type="submit" name="uninstall" value="' . __("Uninstall Redmine Add-On", "gravitymine") . '" class="button" onclick="return confirm(\'' . __("Warning: ALL Redmine Feeds will be deleted. This cannot be undone. \'OK\' to delete, \'Cancel\' to stop", "gravitymine") . '\');"/>';
+                    $uninstall_button = '<input type="submit" name="uninstall" value="' . __( "Uninstall Redmine Add-On", self::$textdomain ) . '" class="button" onclick="return confirm(\'' . __( "Warning: ALL Redmine feeds will be deleted. This cannot be undone.", self::$textdomain ) . '\');"/>';
                     echo apply_filters("gform_redmine_uninstall_button", $uninstall_button);
                     ?>
                 </div>
@@ -288,12 +300,25 @@ class GFRedmine
     }
     
     
-    public static function redmine_page(){
-        $view = rgar($_GET,"view");
-        if($view == "edit")
-            self::edit_page($_GET["id"]);
+    public static function redmine_page ()
+    {
+        $view = rgar( $_GET, 'view' );
+        if ($view == 'edit')
+            self::edit_page( $_GET['id'] );
         else
             self::list_page();
+    }
+    
+    
+    private static function list_page ()
+    {
+        // TODO
+    }
+    
+    
+    private static function edit_page ()
+    {
+        // TODO
     }
     
     
@@ -351,29 +376,20 @@ class GFRedmine
      * PLUGIN UPGRADE
      */
     
-	public static function flush_version_info(){
+	public static function flush_version_info ()
+	{
         if (!class_exists( 'RGRedmineUpgrade' ))
             require_once("plugin-upgrade.php");
 
         RGRedmineUpgrade::set_version_info( false );
     }
     
-    public static function plugin_row(){
-        if (!self::is_gravityforms_supported()) {
-            $message = sprintf( __("Gravity Forms " . self::$min_gravityforms_version . " is required. Activate it now or %spurchase it today!%s"), "<a href='http://www.gravityforms.com'>", "</a>" );
-            RGRedmineUpgrade::display_plugin_message( $message, true );
-        }
-        else
+    public static function plugin_row ()
+    {
+        if (!self::is_gravityforms_supported())
         {
-            $version_info = RGRedmineUpgrade::get_version_info(self::$slug, self::get_key(), self::$version);
-
-            if(!$version_info["is_valid_key"]){
-                $new_version = version_compare(self::$version, $version_info["version"], '<')
-                	? __('There is a new version of the Gravity Mine Add-On available.', 'gravitymine') .' <a class="thickbox" title="Gravity Forms Redmine Add-On" href="plugin-install.php?tab=plugin-information&plugin=' . self::$slug . '&TB_iframe=true&width=640&height=808">'. sprintf(__('View version %s Details', 'gravitymine'), $version_info["version"]) . '</a>. '
-                	: '';
-                $message = $new_version . sprintf(__('%sRegister%s your copy of Gravity Forms to receive access to automatic upgrades and support. Need a license key? %sPurchase one now%s.', 'gravitymine'), '<a href="admin.php?page=gf_settings">', '</a>', '<a href="http://www.gravityforms.com">', '</a>') . '</div></td>';
-                RGRedmineUpgrade::display_plugin_message($message);
-            }
+            $message = sprintf( __('Gravity Forms %s is required. Activate it now or <a href="http://www.gravityforms.com">purchase it today!</a>'), self::$min_gravityforms_version );
+            RGRedmineUpgrade::display_plugin_message( $message, true );
         }
     }
     
