@@ -2,46 +2,38 @@
 
 require_once( 'ActiveResource.php' );
 
-class RedmineAPI {
-    var $version = "1.3";
-    var $errorMessage;
-    var $errorCode;
-    var $timeout = 300;
-    var $chunkSize = 8192;
-    var $apiUrl;
-    var $apiKey;
 
+class RedmineAPI extends ActiveResource {
+    var $site               = false;
+    var $element_name       = false;
+    var $request_format     = 'xml';
+    
+    var $min_api_version    = '1.0.5';
+    var $api_key            = false;
+    
     /**
      * Connect to the Redmine API.
      */
-    function RedmineAPI ($apiurl, $apikey)
+    function RedmineAPI ($site, $key, $element, $data = array())
     {
-        $this->apiUrl = parse_url( $apiurl );
-        $this->apiKey = $apikey;
+        $this->site         = $site;
+        $this->element_name = $element;
+        $this->api_key      = $key;
+        
+        parent::__construct( $data );
     }
     
     
-    function setTimeout ($seconds)
+    function find ($id = false, $options = array())
     {
-        if (is_int( $seconds )) {
-            $this->timeout = $seconds;
-            return true;
+        if ($this->api_key)
+        {
+            $options = array_merge( $options, array( 'key' => $this->api_key ) );
         }
-        return false;
+        
+        return parent::find( $id, $options );
     }
-    
-    
-    function getTimeout ()
-    {
-        return $this->timeout;
-    }
-    
-    
-    function __call ($method, $params)
-    {
-    	
-    }
-    
+        
 }
 
 ?>

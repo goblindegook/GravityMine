@@ -56,7 +56,7 @@ class GFRedmine
         if (is_admin())
         {
             //loading translations
-            load_plugin_textdomain('gravitymine', FALSE, '/gravitymine/languages' );
+            load_plugin_textdomain( 'gravitymine', FALSE, '/gravitymine/languages' );
 
             //automatic upgrade hooks
             add_filter( 'transient_update_plugins'				, array( 'GFRedmine', 'check_update' ) );
@@ -122,7 +122,18 @@ class GFRedmine
     
     private static function is_valid_url ($url)
     {
-    	return true;
+        if (!empty( $url ))
+        {
+            if (!class_exists( "RedmineAPI" ))
+            {
+                require_once("api/RedmineAPI.class.php");
+            }
+            
+            $projects = new RedmineAPI( $url, false, 'project' );
+            $projects->find( 'all' );
+        }
+
+        return (!projects || $projects->errno == 6) ? false : true;
     }
     
     
@@ -134,14 +145,12 @@ class GFRedmine
             {
                 require_once("api/RedmineAPI.class.php");
             }
-
-            $api = new RedmineAPI( $url, $apikey );
+            
+            $projects = new RedmineAPI( $url, $apikey, 'project' );
+            $projects->find( 'all' );
         }
-
-        if (!$api || $api->errorCode)
-            return null;
-
-        return $api->errorCode ? false : true;
+        
+        return (!projects || $projects->errno) ? false : true;
     }
     
 
@@ -156,10 +165,10 @@ class GFRedmine
                 require_once("api/RedmineAPI.class.php");
             }
 
-            $api = new RedmineAPI( $settings["url"], $settings["apikey"] );
+            $api = new RedmineAPI( $settings["url"], $settings["apikey"], 'issue' );
         }
 
-        if (!$api || $api->errorCode)
+        if (!$api || $api->errno)
             return null;
 
         return $api;
