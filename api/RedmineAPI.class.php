@@ -13,36 +13,38 @@ class RedmineAPI extends ActiveResource {
     var $api_params     = false;
     
     /**
-     * Connect to the Redmine API.
+     * Redmine API constructor.
      */
-    function RedmineAPI ($site, $key, $element, $data = array())
+    function RedmineAPI ($data = array())
     {
-        $this->api_version      = array(
+        $this->api_params   = array();
+        $this->api_version  = array(
             'min'   => '1.0.5',
             'max'   => null,
         );
     
-        $this->site         = $site;
-        $this->element_name = $element;
-        $this->api_params   = array();
-        
-        if (!empty( $key ))
+        if (!empty( $data['_site'] ))
         {
-            $this->api_key              = $key;
-            $this->api_params['key']    = $key;
+            $this->site = substr( $data['_site'], -1 ) == '/' ? $data['_site'] : $data['_site'] . '/';
         }
+        
+        if (!empty( $data['_element'] ))
+        {
+            $this->element_name = $data['_element'];
+        }
+        
+        if (!empty( $data['_key'] ))
+        {
+            $this->api_key              = $data['_key'];
+            $this->api_params['key']    = $data['_key'];
+        }
+        
+        unset( $data['_site'] );
+        unset( $data['_element'] );
+        unset( $data['_key'] );
         
         parent::__construct( $data );
     }
-    
-    
-    /*
-    function find ($id = false, $options = array())
-    {
-        return parent::find( $id, $options );
-    }
-    */
-    
     
 	function _send_and_receive ($url, $method, $data = array()) {
 	

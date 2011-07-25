@@ -92,7 +92,7 @@ class GFRedmineData
             return array();
 
         $result = $results[0];
-        $result["meta"] = maybe_unserialize($result["meta"]);
+        $result["meta"] = maybe_unserialize( $result["meta"] );
         return $result;
     }
 

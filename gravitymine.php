@@ -28,21 +28,21 @@ register_activation_hook( __FILE__, array( 'GFRedmine', 'add_permissions' ) );
 
 class GFRedmine
 {
-    private static $path = "gravitymine/gravitymine.php";
-    private static $url = 'http://log.pt';
-    private static $slug = "gravitymine";
-    private static $textdomain = 'gravitymine';
-    private static $version = "0.1";
-    private static $min_gravityforms_version = "1.5";
-    private static $min_redmine_version = "1.1";
-
+    private static $path                        = 'gravitymine/gravitymine.php';
+    private static $url                         = 'http://log.pt';
+    private static $slug                        = 'gravitymine';
+    private static $textdomain                  = 'gravitymine';
+    private static $version                     = '0.1';
+    private static $min_gravityforms_version    = '1.5';
+    private static $min_redmine_version         = '1.0.5';
+    
     public static function init ()
     {
         if (RG_CURRENT_PAGE == "plugins.php")
         {
             //loading translations
             load_plugin_textdomain( self::$textdomain, FALSE, '/gravitymine/languages' );
-            add_action(' after_plugin_row_' . self::$path, array('GFRedmine', 'plugin_row') );
+            add_action( 'after_plugin_row_' . self::$path, array( 'GFRedmine', 'plugin_row' ) );
 
             //force new remote request for version info on the plugin page
             self::flush_version_info();
@@ -67,25 +67,20 @@ class GFRedmine
             {
                 //enqueueing sack for AJAX requests
                 wp_enqueue_script( array( "sack" ) );
-
-                //loading data lib
+                
                 require_once( self::get_base_path() . "/data.php" );
-
-                //loading upgrade lib
+                
                 if (!class_exists( "RGRedmineUpgrade" ))
                     require_once( "plugin-upgrade.php" );
-
-                //loading Gravity Forms tooltips
+                
                 require_once( GFCommon::get_base_path() . "/tooltips.php" );
+                
                 add_filter( 'gform_tooltips', array( 'GFRedmine', 'tooltips' ) );
-
-                //runs the setup when version changes
+                
                 self::setup();
-
             }
             else if (in_array( RG_CURRENT_PAGE, array( "admin-ajax.php" ) ))
             {
-                //loading data class
                 require_once( self::get_base_path() . "/data.php");
                 
                 add_action( 'wp_ajax_gf_redmine_update_feed_active'	, array( 'GFRedmine', 'update_feed_active' ) );
@@ -94,7 +89,7 @@ class GFRedmine
             }
             else if (RGForms::get( "page" ) == "gf_settings")
             {
-                RGForms::add_settings_page( "Redmine", array( 'GFRedmine', 'settings_page' ), self::get_base_url() . "/images/redmine_wordpress_icon_32.png");
+                RGForms::add_settings_page( "Redmine", array( 'GFRedmine', 'settings_page' ), self::get_base_url() . "/images/redmine-icon-32.png");
             }
             
         }
@@ -103,31 +98,22 @@ class GFRedmine
             //loading data class
             require_once( self::get_base_path() . "/data.php" );
 
-            //handling post submission.
-            /*
-            add_filter( 'gform_confirmation'				, array( 'GFRedmine', 'send_to_redmine' ), 1000, 4 );
-            add_filter( 'gform_disable_post_creation'		, array( 'GFRedmine', 'delay_post' ), 10, 3 );
-            add_filter( 'gform_disable_user_notification'	, array( 'GFRedmine', 'delay_autoresponder' ), 10, 3 );
-            add_filter( 'gform_disable_admin_notification'	, array( 'GFRedmine', 'delay_notification' ), 10, 3 );
-            */
+            // handling form submission
+            add_action( 'gform_post_submission'  , array( 'GFRedmine', 'report_issue'    ), 10, 2 );
+            add_filter( 'gform_validation'       , array( 'GFRedmine', 'issue_validation') );
         }
     }
     
-    
-    public static function create_menu ($menus)
+    public static function update_feed_active ()
     {
-        // Adding submenu if user has access
-        $permission = self::has_access( 'gravityforms_redmine' );
-        if(!empty($permission))
-            $menus[] = array(
-                'name'          => 'gf_redmine',
-                'label'         => __( 'Redmine', self::$textdomain),
-                'callback'      =>  array( 'GFRedmine', 'redmine_page' ),
-                'permission'    => $permission
-            );
-        return $menus;
+        check_ajax_referer( 'gf_redmine_update_feed_active', 'gf_redmine_update_feed_active' );
+        $id = RGForms::post( 'feed_id' );
+        $feed = GFRedmineData::get_feed( $id );
+        GFRedmineData::update_feed( $id, $feed['form_id'], RGForms::post( 'is_active' ), $feed["meta"] );
     }
     
+    
+    /* API METHODS */
     
     private static function is_valid_url ($url)
     {
@@ -135,16 +121,15 @@ class GFRedmine
         {
             if (!class_exists( "RedmineAPI" ))
             {
-                require_once("api/RedmineAPI.class.php");
+                require_once( 'api/RedmineAPI.class.php' );
             }
             
-            $projects = new RedmineAPI( $url, false, 'project' );
+            $projects = new RedmineAPI( array( '_site' => $url, '_element' => 'project' ) );
             $projects->find( 'all' );
         }
 
-        return (!projects || $projects->errno == 6) ? false : true;
+        return (!$projects || $projects->errno == 6) ? false : true;
     }
-    
     
     private static function is_valid_login ($url, $apikey)
     {
@@ -152,17 +137,16 @@ class GFRedmine
         {
             if (!class_exists( "RedmineAPI" ))
             {
-                require_once("api/RedmineAPI.class.php");
+                require_once( 'api/RedmineAPI.class.php' );
             }
             
-            $projects = new RedmineAPI( $url, $apikey, 'project' );
+            $projects = new RedmineAPI( array( '_site' => $url, '_key' => $apikey, '_element' => 'project' ) );
             $projects->find( 'all' );
         }
         
-        return (!projects || $projects->errno) ? false : true;
+        return (!$projects || $projects->errno) ? false : true;
     }
     
-
     private static function get_api ( $element, $data = array() )
     {
         $settings = get_option( "gf_redmine_settings" );
@@ -173,8 +157,14 @@ class GFRedmine
             {
                 require_once( "api/RedmineAPI.class.php" );
             }
+            
+            $data = array_merge( $data, array(
+                '_site'     => $settings['url'],
+                '_key'      => $settings['apikey'],
+                '_element'  => $element
+            ) );
 
-            $api = new RedmineAPI( $settings["url"], $settings["apikey"], $element, $data );
+            $api = new RedmineAPI( $data );
         }
         
         if (!$api || $api->errno)
@@ -183,6 +173,22 @@ class GFRedmine
         return $api;
     }
     
+    
+    /* BACKEND INTERFACE */
+    
+    public static function create_menu ($menus)
+    {
+        // Adding submenu if user has access
+        $permission = self::has_access( 'gravityforms_redmine' );
+        if(!empty( $permission ))
+            $menus[] = array(
+                'name'          => 'gf_redmine',
+                'label'         => __( 'Redmine', self::$textdomain),
+                'callback'      =>  array( 'GFRedmine', 'redmine_page' ),
+                'permission'    => $permission
+            );
+        return $menus;
+    }
     
     public static function settings_page ()
     {
@@ -253,14 +259,13 @@ class GFRedmine
             </p>
 
             <table class="form-table">
-                <tr class="<?php echo $hidden_class ?>">
+                <tr>
                     <th scope="row"><label for="gf_redmine_url"><?php _e( "Redmine URL", self::$textdomain ); ?></label> </th>
                     <td>
                     	<input type="text" id="gf_redmine_url" name="gf_redmine_url" value="<?php echo esc_attr($settings["url"]) ?>" size="50" />
                     	<?php echo $feedback_image_url ?>
                     </td>
                 </tr>
-
                 <tr>
                     <th scope="row"><label for="gf_redmine_apikey"><?php _e("Redmine API Key", self::$textdomain); ?></label> </th>
                     <td>
@@ -268,11 +273,6 @@ class GFRedmine
                         <?php echo $feedback_image_apikey ?>
                     </td>
                 </tr>
-                
-                <tr class="<?php echo $hidden_class ?>">
-                    <td colspan="2" class="<?php echo $class ?>"><?php echo $message ?></td>
-                </tr>
-                
                 <tr>
                     <td colspan="2" ><input type="submit" name="gf_redmine_submit" class="button-primary" value="<?php _e( "Save Settings", self::$textdomain ) ?>" /></td>
                 </tr>
@@ -291,7 +291,7 @@ class GFRedmine
                 <div class="delete-alert"><?php _e("Warning: This operation deletes ALL Redmine Feeds.", self::$textdomain) ?>
                     <?php
                     $uninstall_button = '<input type="submit" name="uninstall" value="' . __( "Uninstall Redmine Add-On", self::$textdomain ) . '" class="button" onclick="return confirm(\'' . __( "Warning: ALL Redmine feeds will be deleted. This cannot be undone.", self::$textdomain ) . '\');"/>';
-                    echo apply_filters("gform_redmine_uninstall_button", $uninstall_button);
+                    echo apply_filters( 'gform_redmine_uninstall_button', $uninstall_button);
                     ?>
                 </div>
             <?php } ?>
@@ -302,9 +302,11 @@ class GFRedmine
     
     public static function redmine_page ()
     {
-        $view = rgar( $_GET, 'view' );
-        if ($view == 'edit')
-            self::edit_page( $_GET['id'] );
+        $view   = RGForms::get( 'view' );
+        $id     = RGForms::get( 'id' );
+        
+        if ('edit' == $view)
+            self::edit_page( $id );
         else
             self::list_page();
     }
@@ -312,7 +314,155 @@ class GFRedmine
     
     private static function list_page ()
     {
-        // TODO
+        if (!self::is_gravityforms_supported())
+        {
+            die( sprintf( __( 'The Redmine Add-On requires Gravity Forms %s. Upgrade automatically on the <a href="plugins.php">Plugin page</a>.', self::$textdomain), self::$min_gravityforms_version ) );
+        }
+
+        $action         = RGForms::post( 'action' );
+        $bulk_action    = RGForms::post( 'bulk_action' );
+
+        if ('delete' == $action)
+        {
+            check_admin_referer( 'list_action', 'gf_redmine_list' );
+            $id = absint( $_POST["action_argument"] );
+            
+            GFRedmineData::delete_feed( $id );
+            
+            ?><div class="updated fade" style="padding:6px"><?php _e( "Feed deleted.", self::$textdomain ) ?></div><?php
+        }
+        else if (!empty( $bulk_action ))
+        {
+            check_admin_referer( 'list_action', 'gf_redmine_list' );
+            $selected_feeds = RGForms::post( 'feed' );
+            
+            if (is_array( $selected_feeds ))
+            {
+                foreach ($selected_feeds as $feed_id)
+                    GFRedmineData::delete_feed( $feed_id );
+            }
+            
+            ?><div class="updated fade" style="padding:6px"><?php _e("Feeds deleted.", self::$textdomain) ?></div><?php
+        }
+
+        ?>
+        <div class="wrap">
+            <img alt="<?php _e( 'Redmine', self::$textdomain ) ?>" src="<?php echo self::get_base_url() ?>/images/redmine-icon-32.png" style="float: left; margin: 15px 7px 0 0;" />
+            <h2><?php _e( 'Redmine Forms', self::$textdomain); ?>
+                <a class="button add-new-h2" href="admin.php?page=gf_redmine&view=edit&id=0"><?php _e( 'Add New', self::$textdomain ) ?></a>
+            </h2>
+
+            <form id="feed_form" method="post">
+                <?php wp_nonce_field( 'list_action', 'gf_redmine_list' ) ?>
+                <input type="hidden" id="action" name="action"/>
+                <input type="hidden" id="action_argument" name="action_argument"/>
+
+                <div class="tablenav">
+                    <div class="alignleft actions" style="padding:8px 0 7px;">
+                        <label class="hidden" for="bulk_action"><?php _e( 'Bulk action', self::$textdomain ) ?></label>
+                        <select name="bulk_action" id="bulk_action">
+                            <option value=''><?php _e( 'Bulk action', self::$textdomain ) ?></option>
+                            <option value='delete'><?php _e( 'Delete', self::$textdomain ) ?></option>
+                        </select>
+                        <input type="submit" class="button" value="<?php _e( 'Apply', self::$textdomain ) ?>" onclick="if (jQuery('#bulk_action').val() == 'delete' && !confirm('<?php _e( 'Delete selected feeds?', self::$textdomain ) ?>')) { return false; } return true;" />
+                    </div>
+                </div>
+                <table class="widefat fixed" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th scope="col" id="cb" class="manage-column column-cb check-column" style=""><input type="checkbox" /></th>
+                            <th scope="col" id="active" class="manage-column check-column"></th>
+                            <th scope="col" class="manage-column"><?php _e( 'Form', self::$textdomain ) ?></th>
+                        </tr>
+                    </thead>
+                    <tfoot>
+                        <tr>
+                            <th scope="col" id="cb" class="manage-column column-cb check-column" style=""><input type="checkbox" /></th>
+                            <th scope="col" id="active" class="manage-column check-column"></th>
+                            <th scope="col" class="manage-column"><?php _e( 'Form', self::$textdomain ) ?></th>
+                        </tr>
+                    </tfoot>
+
+                    <tbody class="list:user user-list">
+                        <?php
+                        
+                        $settings = GFRedmineData::get_feeds();
+                        
+                        if (is_array( $settings ) && sizeof( $settings ) > 0)
+                        {
+                            foreach ($settings as $setting)
+                            {
+                                $feed_status = $setting['is_active'] ? __( 'Active', self::$textdomain ) : __( 'Inactive', self::$textdomain );
+                                ?>
+                                <tr class='author-self status-inherit' valign="top">
+                                    <th scope="row" class="check-column"><input type="checkbox" name="feed[]" value="<?php echo $setting['id'] ?>" /></th>
+                                    <td><img src="<?php echo self::get_base_url() ?>/images/active<?php echo intval( $setting['is_active'] ) ?>.png" alt="<?php echo $feed_status; ?>" title="<?php echo $feed_status; ?>" onclick="ToggleActive(this, <?php echo $setting['id'] ?>);" /></td>
+                                    <td class="column-title">
+                                        <a href="admin.php?page=gf_redmine&view=edit&id=<?php echo $setting['id'] ?>" title="<?php _e( 'Edit', self::$textdomain ) ?>"><?php echo $setting['form_title'] ?></a>
+                                        <div class="row-actions">
+                                            <span class="edit">
+                                                <a title="<?php _e( 'Edit', self::$textdomain) ?>" href="admin.php?page=gf_redmine&view=edit&id=<?php echo $setting['id'] ?>" title="<?php _e( 'Edit', self::$textdomain ) ?>"><?php _e( 'Edit', self::$textdomain ) ?></a>
+                                            </span> | <span class="edit">
+                                                <a title="<?php _e( 'Delete', self::$textdomain ) ?>" href="javascript: if (confirm('<?php _e( 'Delete this feed?', self::$textdomain ) ?>')) { DeleteSetting(<?php echo $setting['id'] ?>); }"><?php _e( 'Delete', self::$textdomain) ?></a>
+                                            </span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <?php
+                            }
+                        }
+                        else{
+                            ?>
+                            <tr>
+                                <td colspan="3" style="padding: 20px;">
+                                    <?php _e( 'No Redmine feeds configured. <a href="admin.php?page=gf_redmine&view=edit&id=0">Create one.</a>', self::$textdomain ); ?>
+                                </td>
+                            </tr>
+                            <?php
+                        }
+                        ?>
+                    </tbody>
+                </table>
+            </form>
+        </div>
+        <script type="text/javascript">
+        
+            function DeleteSetting (id) {
+                jQuery("#action_argument").val(id);
+                jQuery("#action").val("delete");
+                jQuery("#feed_form")[0].submit();
+            }
+
+            function ToggleActive (img, feed_id) {
+                var is_active = img.src.indexOf('active1.png') >=0
+                if (is_active)
+                {
+                    img.src = img.src.replace('active1.png', 'active0.png');
+                    jQuery(img).attr('title', '<?php _e( 'Inactive', self::$textdomain ) ?>').attr('alt', '<?php _e( 'Inactive', self::$textdomain ) ?>');
+                }
+                else
+                {
+                    img.src = img.src.replace('active0.png', 'active1.png');
+                    jQuery(img).attr('title', '<?php _e( 'Active', self::$textdomain ) ?>').attr('alt', '<?php _e( 'Active', self::$textdomain ) ?>');
+                }
+
+                var mysack = new sack( '<?php echo admin_url( 'admin-ajax.php' ) ?>' );
+                mysack.execute = 1;
+                mysack.method = 'POST';
+                mysack.setVar( 'action'                         , 'gf_redmine_update_feed_active' );
+                mysack.setVar( 'gf_redmine_update_feed_active'  , '<?php echo wp_create_nonce( 'gf_redmine_update_feed_active' ) ?>' );
+                mysack.setVar( 'feed_id'                        , feed_id );
+                mysack.setVar( 'is_active'                      , is_active ? 0 : 1 );
+                mysack.encVar( 'cookie'                         , document.cookie, false );
+                
+                mysack.onError = function() { alert( '<?php echo esc_js( __( "Error while updating feed", self::$textdomain ) ) ?>' ) };
+                
+                mysack.runAJAX();
+                
+                return true;
+            }
+        </script>
+        <?php
     }
     
     
